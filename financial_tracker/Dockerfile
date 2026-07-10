@@ -14,12 +14,12 @@ RUN apk add --no-cache nodejs npm
 
 WORKDIR /app
 
-COPY server/package.json ./server/
-RUN cd server && npm install --production
+COPY server/package.json server/package-lock.json ./server/
+RUN cd server && npm ci --production
 
 COPY server/ ./server/
 COPY --from=builder /build/dist ./dist/
-COPY addon/run.sh /run.sh
+COPY run.sh /run.sh
 RUN chmod +x /run.sh
 
 CMD ["/run.sh"]

@@ -1,3 +1,6 @@
 node_modules/
 dist/
 .claude/
+financial_tracker/node_modules/
+financial_tracker/dist/
+financial_tracker/server/node_modules/
