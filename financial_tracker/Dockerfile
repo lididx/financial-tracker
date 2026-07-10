@@ -15,7 +15,7 @@ RUN apk add --no-cache nodejs npm
 WORKDIR /app
 
 COPY server/package.json server/package-lock.json ./server/
-RUN cd server && npm ci --production
+RUN cd server && npm install --omit=dev
 
 COPY server/ ./server/
 COPY --from=builder /build/dist ./dist/
