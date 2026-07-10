@@ -595,32 +595,32 @@ export default function App() {
 
   // ---------- derived ----------
   const savingsTotal = useMemo(
-    () => Object.values(data.savings || {}).reduce((s, v) => {
+    () => Object.values(data?.savings || {}).reduce((s, v) => {
       const amount = (v && typeof v === 'object') ? v.amount : v
       return s + (parseNum(amount) || 0)
     }, 0),
-    [data.savings]
+    [data?.savings]
   )
 
   const accounts = useMemo(() =>
-    data.accounts.map(a => {
+    (data?.accounts || []).map(a => {
       const base = a.auto === 'savings' ? { ...a, balance: savingsTotal } : a
-      const liveBalance = computeLive(base, data.balanceHistory || [])
+      const liveBalance = computeLive(base, data?.balanceHistory || [])
       return { ...base, liveBalance }
     }),
-    [data.accounts, savingsTotal, data.balanceHistory]
+    [data?.accounts, savingsTotal, data?.balanceHistory]
   )
 
   const totals = useMemo(() => {
     const all      = accounts.reduce((s, a) => s + (a.liveBalance || 0), 0)
     const included = accounts.filter(a => a.include).reduce((s, a) => s + (a.liveBalance || 0), 0)
     const excluded = accounts.filter(a => !a.include).reduce((s, a) => s + (a.liveBalance || 0), 0)
-    const available = included - (data.minCheckingBalance || 0)
+    const available = included - (data?.minCheckingBalance || 0)
     return { all, included, excluded, available }
-  }, [accounts, data.minCheckingBalance])
+  }, [accounts, data?.minCheckingBalance])
 
   const payCals = useMemo(() => {
-    const withF = data.payments.map(p => {
+    const withF = (data?.payments || []).map(p => {
       const idxAdd = (p.notIndexed || p.idxPct === null)
         ? 0 : p.base * (parseNum(p.idxPct) / 100)
       return { ...p, idxAdd, final: p.base + idxAdd }
@@ -632,11 +632,11 @@ export default function App() {
       if (p.inForecast) runBal -= p.final
       return { ...p, balAfter: runBal, remAfter: runRem }
     })
-  }, [data.payments, totals.available])
+  }, [data?.payments, totals.available])
 
   const expenseTotal = useMemo(
-    () => data.expenses.reduce((s, e) => s + (parseNum(e.amount) || 0), 0),
-    [data.expenses]
+    () => (data?.expenses || []).reduce((s, e) => s + (parseNum(e.amount) || 0), 0),
+    [data?.expenses]
   )
 
   // ---------- mutators ----------
