@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useSync } from './hooks/useSync.js'
 
 // ============================================================
 //  HELPERS
@@ -511,77 +512,72 @@ function SavingsModal({ month, existing, onSave, onClose }) {
 }
 
 // ============================================================
+//  DATA MIGRATION (applied to data from any source)
+// ============================================================
+function migrateData(loaded) {
+  if (!loaded) return INIT
+  if (!loaded.indexHistory) loaded.indexHistory = { '04/2026': loaded.baseIndex || 140.78 }
+  if (!loaded.balanceHistory) loaded.balanceHistory = []
+  if (!Array.isArray(loaded.creditCards)) loaded.creditCards = []
+  if (!Array.isArray(loaded.income))      loaded.income      = []
+  if (!loaded.mortgage) loaded.mortgage = INIT.mortgage
+  delete loaded.altshulerOpening
+  delete loaded.altshulerAdj
+  if (!loaded.kinderDeps) loaded.kinderDeps = {}
+  if (!loaded.elecDeps)   loaded.elecDeps   = {}
+  loaded.elecDeps = Object.fromEntries(
+    Object.entries(loaded.elecDeps).map(([k, v]) => {
+      if (v && typeof v === 'object' && 'amount' in v) return [k, v]
+      return [k, { amount: v ?? null, kwh: null }]
+    })
+  )
+  if (loaded.electricityTariff == null) loaded.electricityTariff = 0.6376
+  loaded.savings = Object.fromEntries(
+    Object.entries(loaded.savings || {}).map(([k, v]) => {
+      if (v && typeof v === 'object' && 'amount' in v) return [k, v]
+      return [k, { amount: v ?? null, destination: '' }]
+    })
+  )
+  loaded.payments = (loaded.payments || []).map(p => {
+    const { idxLocked, ...rest } = p
+    return rest
+  })
+  loaded.accounts = (loaded.accounts || [])
+    .filter(a => a.auto !== 'savings')
+    .map(a => (a.auto === 'altshuler' ? { ...a, auto: null } : a))
+  return loaded
+}
+
+// ============================================================
+//  SYNC STATUS INDICATOR
+// ============================================================
+function SyncIndicator({ status }) {
+  const labels = {
+    saved:    { text: '✓ מסונכרן',       className: 'sync-saved'    },
+    saving:   { text: '⟳ שומר...',       className: 'sync-saving'   },
+    offline:  { text: '⊘ לא מחובר',      className: 'sync-offline'  },
+    conflict: { text: '⚠ עודכן מהשרת',   className: 'sync-conflict' },
+    loading:  { text: '⟳ טוען...',       className: 'sync-loading'  },
+    migrate:  { text: '⬆ העלה נתונים',   className: 'sync-migrate'  },
+  }
+  const s = labels[status] || labels.saved
+  return <span className={`save-status ${s.className}`}>{s.text}</span>
+}
+
+// ============================================================
 //  MAIN APP
 // ============================================================
 export default function App() {
-  const [data, setData] = useState(() => {
-    try {
-      const s = localStorage.getItem('fin-v2')
-      if (s) {
-        const loaded = JSON.parse(s)
-        // Migration: ensure indexHistory exists
-        if (!loaded.indexHistory) loaded.indexHistory = { '04/2026': loaded.baseIndex || 140.78 }
-        // Migration: ensure balanceHistory exists
-        if (!loaded.balanceHistory) loaded.balanceHistory = []
-        if (!Array.isArray(loaded.creditCards)) loaded.creditCards = []
-        if (!Array.isArray(loaded.income))      loaded.income      = []
-        // Migration: ensure mortgage config exists
-        if (!loaded.mortgage) loaded.mortgage = INIT.mortgage
-        // Migration: drop legacy altshuler auto-tracking opening/adj (kinder/elec kept for manual log)
-        delete loaded.altshulerOpening
-        delete loaded.altshulerAdj
-        if (!loaded.kinderDeps) loaded.kinderDeps = {}
-        if (!loaded.elecDeps)   loaded.elecDeps   = {}
-        // Migration: elecDeps from { month: amount } → { month: { amount, kwh } }
-        loaded.elecDeps = Object.fromEntries(
-          Object.entries(loaded.elecDeps).map(([k, v]) => {
-            if (v && typeof v === 'object' && 'amount' in v) return [k, v]
-            return [k, { amount: v ?? null, kwh: null }]
-          })
-        )
-        if (loaded.electricityTariff == null) loaded.electricityTariff = 0.6376
-        // Migration: savings from { month: amount } → { month: { amount, destination } }
-        loaded.savings = Object.fromEntries(
-          Object.entries(loaded.savings || {}).map(([k, v]) => {
-            if (v && typeof v === 'object' && 'amount' in v) return [k, v]
-            return [k, { amount: v ?? null, destination: '' }]
-          })
-        )
-        // Strip legacy idxLocked field if present
-        loaded.payments = (loaded.payments || []).map(p => {
-          const { idxLocked, ...rest } = p
-          return rest
-        })
-        // Migration: strip 'altshuler' auto so balance becomes manually editable
-        // + remove the auto-savings indicator account (now lives only in the savings tab)
-        loaded.accounts = (loaded.accounts || [])
-          .filter(a => a.auto !== 'savings')
-          .map(a => (a.auto === 'altshuler' ? { ...a, auto: null } : a))
-        return loaded
-      }
-    } catch (_) {}
-    return INIT
-  })
+  const { data, setData, theme, setTheme, syncStatus, setSyncStatus, uploadLocalData } = useSync(migrateData, INIT)
+
   const [tab, setTab]     = useState('dashboard')
-  const [saved, setSaved] = useState(false)
   const [editingAccountId, setEditingAccountId] = useState(null)
   const [editingSavingsMonth, setEditingSavingsMonth] = useState(null)
-  const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem('fin-theme') || 'light' } catch { return 'light' }
-  })
   const [apiData, setApiData]     = useState([])
   const [apiStatus, setApiStatus] = useState({ status: 'idle', lastFetch: null, error: null })
 
   useEffect(() => {
-    localStorage.setItem('fin-v2', JSON.stringify(data))
-    setSaved(true)
-    const t = setTimeout(() => setSaved(false), 1200)
-    return () => clearTimeout(t)
-  }, [data])
-
-  useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
-    try { localStorage.setItem('fin-theme', theme) } catch {}
   }, [theme])
 
   const refreshFromCbs = useCallback(async () => {
@@ -830,13 +826,45 @@ export default function App() {
     { id: 'mortgage',  label: 'ניהול משכנתא',      icon: '🏛️' },
   ]
 
+  if (!data) {
+    return (
+      <div className="app" dir="rtl" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div style={{ textAlign: 'center', fontSize: '1.2rem', color: 'var(--subtext)' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 16 }}>💎</div>
+          טוען נתונים...
+        </div>
+      </div>
+    )
+  }
+
+  if (syncStatus === 'migrate') {
+    return (
+      <div className="app" dir="rtl" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div className="modal" style={{ position: 'relative', maxWidth: 420, textAlign: 'center', padding: 32 }}>
+          <h3 style={{ marginBottom: 12 }}>⬆️ העברת נתונים לשרת</h3>
+          <p style={{ marginBottom: 24, color: 'var(--subtext)' }}>
+            נמצאו נתונים מקומיים במכשיר זה. האם להעלות אותם לשרת כדי לסנכרן בין כל המכשירים?
+          </p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+            <button className="btn btn-primary" onClick={() => { uploadLocalData(data); setSyncStatus('saved') }}>
+              ✓ העלה לשרת
+            </button>
+            <button className="btn btn-outline" onClick={() => { setData(INIT); setSyncStatus('saved') }}>
+              התחל מאפס
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="app" dir="rtl">
       <header className="header">
         <div className="header-content">
           <h1>💎 מערכת ניהול כספים — דירה וחסכונות</h1>
           <div className="header-actions">
-            {saved && <span className="save-status">✓ נשמר</span>}
+            <SyncIndicator status={syncStatus} />
             <button className="btn btn-secondary btn-sm" onClick={exportData}>ייצא JSON</button>
             <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
               ייבא JSON

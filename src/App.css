@@ -588,9 +588,14 @@ body {
 
 .save-status {
   font-size: 0.82rem;
-  color: #93c5fd;
   font-weight: 500;
 }
+.sync-saved    { color: #4ade80; }
+.sync-saving   { color: #fbbf24; }
+.sync-offline  { color: #f87171; }
+.sync-conflict { color: #fbbf24; }
+.sync-loading  { color: #94a3b8; }
+.sync-migrate  { color: #60a5fa; }
 
 .tabs {
   display: flex;
