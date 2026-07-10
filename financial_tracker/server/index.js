@@ -116,11 +116,24 @@ app.get('/api/events', (req, res) => {
   });
 });
 
+const indexHtml = existsSync(join(DIST_DIR, 'index.html'))
+  ? readFileSync(join(DIST_DIR, 'index.html'), 'utf-8')
+  : null;
+
+function serveIndex(req, res) {
+  if (!indexHtml) return res.status(404).send('Not found');
+  const ingressPath = req.headers['x-ingress-path'];
+  if (ingressPath) {
+    const html = indexHtml.replace('<head>', `<head><base href="${ingressPath}/">`);
+    return res.type('html').send(html);
+  }
+  res.type('html').send(indexHtml);
+}
+
 if (existsSync(DIST_DIR)) {
+  app.get('/', serveIndex);
   app.use(express.static(DIST_DIR));
-  app.get('*', (_req, res) => {
-    res.sendFile(join(DIST_DIR, 'index.html'));
-  });
+  app.get('*', serveIndex);
 }
 
 app.listen(PORT, '0.0.0.0', () => {

@@ -2,12 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 
 const CLIENT_ID = Math.random().toString(36).slice(2)
 
-function getBasePath() {
-  const match = window.location.pathname.match(/^(\/api\/hassio_ingress\/[^/]+)/)
-  if (match) return match[1]
-  return ''
-}
-
 export function useSync(migrateData, INIT) {
   const [data, setDataRaw] = useState(null)
   const [theme, setThemeRaw] = useState(() => {
@@ -18,16 +12,13 @@ export function useSync(migrateData, INIT) {
   const revisionRef = useRef(0)
   const saveTimerRef = useRef(null)
   const abortRef = useRef(null)
-  const basePath = useRef(getBasePath())
   const dataRef = useRef(null)
-
-  const apiUrl = useCallback((path) => `${basePath.current}${path}`, [])
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const res = await fetch(apiUrl('/api/data'), {
+        const res = await fetch('./api/data', {
           headers: { 'X-Client-Id': CLIENT_ID },
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -82,8 +73,7 @@ export function useSync(migrateData, INIT) {
 
   useEffect(() => {
     if (!sseReady) return
-    const url = apiUrl(`/api/events?clientId=${CLIENT_ID}`)
-    const es = new EventSource(url)
+    const es = new EventSource(`./api/events?clientId=${CLIENT_ID}`)
 
     es.addEventListener('update', (e) => {
       try {
@@ -105,7 +95,7 @@ export function useSync(migrateData, INIT) {
       try {
         const { revision } = JSON.parse(e.data)
         if (revision > revisionRef.current) {
-          fetch(apiUrl('/api/data'), { headers: { 'X-Client-Id': CLIENT_ID } })
+          fetch('./api/data', { headers: { 'X-Client-Id': CLIENT_ID } })
             .then(r => r.json())
             .then(json => {
               if (json.data) {
@@ -147,7 +137,7 @@ export function useSync(migrateData, INIT) {
       const controller = new AbortController()
       abortRef.current = controller
       try {
-        const res = await fetch(apiUrl('/api/data'), {
+        const res = await fetch('./api/data', {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -180,7 +170,7 @@ export function useSync(migrateData, INIT) {
         setSyncStatus('offline')
       }
     }, 800)
-  }, [apiUrl, theme])
+  }, [theme])
 
   const setData = useCallback((updater) => {
     setDataRaw(prev => {
@@ -198,7 +188,7 @@ export function useSync(migrateData, INIT) {
 
   const uploadLocalData = useCallback(async (localData) => {
     try {
-      const res = await fetch(apiUrl('/api/data'), {
+      const res = await fetch('./api/data', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -217,7 +207,7 @@ export function useSync(migrateData, INIT) {
     } catch {
       setSyncStatus('offline')
     }
-  }, [apiUrl])
+  }, [])
 
   return { data, setData, theme, setTheme, syncStatus, setSyncStatus, uploadLocalData }
 }
